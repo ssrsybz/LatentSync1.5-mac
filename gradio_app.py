@@ -4,9 +4,20 @@ from scripts.inference import main
 from omegaconf import OmegaConf
 import argparse
 from datetime import datetime
+import torch
 
-CONFIG_PATH = Path("configs/unet/stage2.yaml")
-CHECKPOINT_PATH = Path("checkpoints/latentsync_unet.pt")
+# 模型配置文件和预训练权重路径
+CONFIG_PATH = Path("configs/unet/stage2.yaml")  # UNet第二阶段模型配置文件
+CHECKPOINT_PATH = Path("checkpoints/latentsync_unet.pt")  # 预训练模型权重文件路径
+
+# 检测可用的计算设备
+def get_available_device():
+    if torch.backends.mps.is_available():
+        return "mps", "Apple Silicon GPU (MPS)"
+    elif torch.cuda.is_available():
+        return "cuda", f"NVIDIA GPU ({torch.cuda.get_device_name()})"
+    else:
+        return "cpu", "CPU (性能可能受限)"
 
 
 def process_video(
@@ -16,6 +27,15 @@ def process_video(
     inference_steps,
     seed,
 ):
+    """
+    视频处理主函数
+    :param video_path: 输入视频路径
+    :param audio_path: 输入音频路径
+    :param guidance_scale: 引导系数，控制生成效果与条件的一致性
+    :param inference_steps: 推理步数，影响生成质量与速度
+    :param seed: 随机种子，保证结果可复现
+    :return: 处理后的视频文件路径
+    """
     # Create the temp directory if it doesn't exist
     output_dir = Path("./temp")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -31,10 +51,14 @@ def process_video(
 
     config = OmegaConf.load(CONFIG_PATH)
 
+    # 获取当前可用的计算设备
+    device, _ = get_available_device()
+    
     config["run"].update(
         {
             "guidance_scale": guidance_scale,
             "inference_steps": inference_steps,
+            "device": device,  # 添加设备配置
         }
     )
 
@@ -56,6 +80,10 @@ def process_video(
 def create_args(
     video_path: str, audio_path: str, output_path: str, inference_steps: int, guidance_scale: float, seed: int
 ) -> argparse.Namespace:
+    """
+    构建命令行参数解析器
+    返回包含模型运行所需参数的Namespace对象
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--inference_ckpt_path", type=str, required=True)
     parser.add_argument("--video_path", type=str, required=True)
@@ -86,9 +114,20 @@ def create_args(
 
 
 # Create Gradio interface
+# 构建Gradio交互界面
 with gr.Blocks(title="LatentSync Video Processing") as demo:
+    """
+    主界面布局包含：
+    - 论文标题和作者信息
+    - 输入输出视频/音频组件
+    - 参数调节滑动条
+    - 示例演示区域
+    """
+    # 获取当前可用的计算设备
+    device, device_name = get_available_device()
+    
     gr.Markdown(
-        """
+        f"""
     # LatentSync: Taming Audio-Conditioned Latent Diffusion Models for Lip Sync with SyncNet Supervision
     Upload a video and audio file to process with LatentSync model.
 
@@ -109,13 +148,17 @@ with gr.Blocks(title="LatentSync Video Processing") as demo:
             <img src='https://img.shields.io/badge/ArXiv-Paper-red'>
         </a>
     </div>
+
+    <div align="center" style="margin-top:10px;padding:10px;background-color:#f0f0f0;border-radius:5px;">
+        <strong>当前使用的计算设备：{device_name}</strong>
+    </div>
     """
     )
 
     with gr.Row():
         with gr.Column():
-            video_input = gr.Video(label="Input Video")
-            audio_input = gr.Audio(label="Input Audio", type="filepath")
+            video_input = gr.Video(label="输入视频")  # 视频上传组件
+            audio_input = gr.Audio(label="输入音频", type="filepath")  # 音频上传组件
 
             with gr.Row():
                 guidance_scale = gr.Slider(
@@ -123,7 +166,7 @@ with gr.Blocks(title="LatentSync Video Processing") as demo:
                     maximum=2.5,
                     value=1.5,
                     step=0.5,
-                    label="Guidance Scale",
+                    label="引导尺度",  # 控制生成效果的引导强度参数
                 )
                 inference_steps = gr.Slider(minimum=10, maximum=50, value=20, step=1, label="Inference Steps")
 

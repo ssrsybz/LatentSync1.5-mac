@@ -12,11 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+删除过期文件工具
+
+该脚本用于删除指定日期范围内的文件和目录。
+"""
 import os
 import subprocess
 
-
 def remove_outdated_files(input_dir, begin_date, end_date):
+    """
+    删除指定日期范围内的文件和目录
+    
+    参数:
+        input_dir: 输入目录
+        begin_date: 开始日期(包含)
+        end_date: 结束日期(包含)
+    """
     # Remove files from a specific time period
     for subdir in os.listdir(input_dir):
         if subdir >= begin_date and subdir <= end_date:
@@ -27,6 +39,9 @@ def remove_outdated_files(input_dir, begin_date, end_date):
 
 
 if __name__ == "__main__":
+    """
+    示例用法
+    """
     input_dir = "/mnt/bn/video-datasets/output/unet"
     begin_date = "train-2024_05_29-12:22:35"
     end_date = "train-2024_09_26-00:10:46"

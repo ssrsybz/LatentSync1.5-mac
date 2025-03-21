@@ -2,12 +2,79 @@
 
 <div align="center">
 
-[![arXiv](https://img.shields.io/badge/arXiv-Paper-b31b1b)](https://arxiv.org/abs/2412.09262)
+[![arXiv](https://img.shields.io/badge/arXiv-Paper-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2412.09262)
 [![arXiv](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Model-yellow)](https://huggingface.co/ByteDance/LatentSync-1.5)
 [![arXiv](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Space-yellow)](https://huggingface.co/spaces/fffiloni/LatentSync)
 <a href="https://replicate.com/lucataco/latentsync"><img src="https://replicate.com/lucataco/latentsync/badge" alt="Replicate"></a>
 
 </div>
+
+[English](README.md) | 简体中文
+
+## 🌟 项目介绍
+
+LatentSync 是一个基于音频条件潜在扩散模型的端到端唇形同步方法，无需任何中间运动表示。不同于之前基于像素空间扩散或两阶段生成的扩散唇形同步方法，我们的框架可以直接利用 Stable Diffusion 的强大能力来建模复杂的音视频相关性。
+
+## 🚀 快速开始
+
+### 环境要求
+
+#### Linux/Windows 环境
+- CUDA 12.1
+- Python 3.10.13
+- 至少 6.8GB 显存（用于推理）
+- 20-30GB 显存（用于训练，取决于配置）
+
+#### macOS 环境
+- macOS 12.3+
+- Python 3.10.13
+- Apple Silicon 芯片（M1/M2/M3系列）或支持Metal的Intel芯片
+- PyTorch 2.1.0+ (支持MPS后端)
+- 至少 8GB 统一内存（用于推理）
+- 24-32GB 统一内存（用于训练，取决于配置）
+
+注意：在macOS环境下，项目将使用MPS (Metal Performance Shaders) 作为CUDA的替代方案。MPS性能可能低于CUDA，但足以支持模型推理。如果您使用的是Intel芯片的Mac，建议使用CPU模式运行。
+
+### 安装步骤
+
+1. 克隆项目并进入目录：
+   ```bash
+   git clone https://github.com/your-username/LatentSync.git
+   cd LatentSync
+   ```
+
+2. 安装依赖并下载模型：
+   ```bash
+   source setup_env.sh
+   ```
+
+3. 检查模型文件是否下载成功。如果只需要进行推理，只需下载以下两个文件：
+   - `checkpoints/latentsync_unet.pt`
+   - `checkpoints/whisper/tiny.pt`
+
+   这两个文件可以从我们的 [HuggingFace 仓库](https://huggingface.co/ByteDance/LatentSync-1.5) 下载。
+
+### 运行方式
+
+有两种方式可以运行推理：
+
+1. 使用 Gradio 网页界面（推荐）：
+   ```bash
+   python gradio_app.py
+   ```
+   启动后，打开浏览器访问显示的本地地址即可。
+
+2. 使用命令行界面：
+   ```bash
+   ./inference.sh
+   ```
+
+### 参数调整
+
+可以通过调整以下参数来获得更好的效果：
+
+- `inference_steps`：范围[20-50]，值越大视觉质量越好，但生成速度会变慢
+- `guidance_scale`：范围[1.0-3.0]，值越大唇形同步准确度越高，但可能导致视频失真或抖动
 
 ## 🔥 Updates
 
@@ -131,7 +198,10 @@ Run the script for inference:
 ./inference.sh
 ```
 
-You can change the parameters `inference_steps` and `guidance_scale` to see more results.
+You can try adjusting the following inference parameters to achieve better results:
+
+- `inference_steps` [20-50]: A higher value improves visual quality but slows down the generation speed.
+- `guidance_scale` [1.0-3.0]: A higher value improves lip-sync accuracy but may cause the video distortion or jitter.
 
 ## 🔄 Data Processing Pipeline
 
@@ -155,9 +225,7 @@ You should change the parameter `input_dir` in the script to specify the data di
 
 ## 🏋️‍♂️ Training U-Net
 
-Before training, you must process the data as described above and download all the checkpoints. We released a pretrained SyncNet with 94% accuracy on both VoxCeleb2 and HDTF datasets for the supervision of U-Net training. Note that this SyncNet is trained on affine transformed videos, so when using or evaluating this SyncNet, you need to perform affine transformation on the video first (the code of affine transformation is included in the data processing pipeline).
-
-If all the preparations are complete, you can train the U-Net with the following script:
+Before training, you must process the data as described above and download all the checkpoints. We released a pretrained SyncNet with 94% accuracy on both VoxCeleb2 and HDTF datasets for the supervision of U-Net training. If all the preparations are complete, you can train the U-Net with the following script:
 
 ```bash
 ./train_unet.sh
@@ -169,7 +237,11 @@ We prepared three UNet configuration files in the ``configs/unet`` directory, ea
 - `stage2.yaml`: Stage2 training with optimal performance, requires **30 GB** VRAM.
 - `stage2_efficient.yaml`: Efficient Stage 2 training, requires **20 GB** VRAM. It may lead to slight degradation in visual quality and temporal consistency compared with `stage2.yaml`, suitable for users with consumer-grade GPUs, such as the RTX 3090.
 
-Also remember to change the parameters in U-Net config file to specify the data directory, checkpoint save path, and other training hyperparameters.
+Also remember to change the parameters in U-Net config file to specify the data directory, checkpoint save path, and other training hyperparameters. For convenience, we prepared a script for writing a data files list. Run the following command:
+
+```bash
+python -m tools.write_fileslist
+```
 
 ## 🏋️‍♂️ Training SyncNet
 
@@ -195,6 +267,8 @@ You can evaluate the accuracy of SyncNet on a dataset by running the following s
 ./eval/eval_syncnet_acc.sh
 ```
 
+Note that our released SyncNet is trained on data processed through our data processing pipeline, which includes special operations such as affine transformation and audio-visual adjustment. Therefore, before evaluation, the test data must first be processed using the provided pipeline.
+
 ## 🙏 Acknowledgement
 
 - Our code is built on [AnimateDiff](https://github.com/guoyww/AnimateDiff). 
@@ -202,8 +276,15 @@ You can evaluate the accuracy of SyncNet on a dataset by running the following s
 
 Thanks for their generous contributions to the open-source community.
 
-<!-- ## Citation
-If you find our repo useful for your research, please consider citing our paper:
-```
+## 📖 Citation
 
-``` -->
+If you find our repo useful for your research, please consider citing our paper:
+
+```bibtex
+@article{li2024latentsync,
+  title={LatentSync: Taming Audio-Conditioned Latent Diffusion Models for Lip Sync with SyncNet Supervision},
+  author={Li, Chunyu and Zhang, Chao and Xu, Weikai and Lin, Jingyu and Xie, Jinghui and Feng, Weiguo and Peng, Bingyue and Chen, Cunjian and Xing, Weiwei},
+  journal={arXiv preprint arXiv:2412.09262},
+  year={2024}
+}
+```

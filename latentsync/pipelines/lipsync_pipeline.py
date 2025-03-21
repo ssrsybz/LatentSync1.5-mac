@@ -127,16 +127,27 @@ class LipsyncPipeline(DiffusionPipeline):
 
     @property
     def _execution_device(self):
-        if self.device != torch.device("meta") or not hasattr(self.denoising_unet, "_hf_hook"):
+        """
+        获取模型执行设备
+        Determine execution device with special handling for MPS devices
+
+        MPS设备需要特殊处理以避免性能问题，其他设备保持默认逻辑
+        """
+        # 如果设备是MPS，直接返回
+        # 优先处理MPS设备
+        if self.device.type == "mps":
+            return torch.device("mps")
+        
+        # 其他设备保持原有逻辑
+        if self.device != torch.device("meta"):
             return self.device
+        
+        # 适配huggingface_hook
         for module in self.denoising_unet.modules():
-            if (
-                hasattr(module, "_hf_hook")
-                and hasattr(module._hf_hook, "execution_device")
-                and module._hf_hook.execution_device is not None
-            ):
+            if hasattr(module, "_hf_hook") and hasattr(module._hf_hook, "execution_device"):
                 return torch.device(module._hf_hook.execution_device)
-        return self.device
+        
+        return torch.device("cpu")  # 默认返回CPU
 
     def decode_latents(self, latents):
         latents = latents / self.vae.config.scaling_factor + self.vae.config.shift_factor
@@ -176,6 +187,20 @@ class LipsyncPipeline(DiffusionPipeline):
             )
 
     def prepare_latents(self, batch_size, num_frames, num_channels_latents, height, width, dtype, device, generator):
+        """
+        准备潜在空间噪声
+        Prepare initial latents with noise for diffusion process
+
+        Args:
+            batch_size: 批处理大小
+            num_frames: 视频帧数
+            num_channels_latents: 潜在空间通道数
+            height: 图像高度
+            width: 图像宽度
+            dtype: 数据类型
+            device: 计算设备
+            generator: 随机数生成器
+        """
         shape = (
             batch_size,
             num_channels_latents,
@@ -282,6 +307,12 @@ class LipsyncPipeline(DiffusionPipeline):
         return np.stack(out_frames, axis=0)
 
     def loop_video(self, whisper_chunks: list, video_frames: np.ndarray):
+        """
+        视频循环处理逻辑
+        Loop video frames to match audio duration with alternating directions
+
+        当音频时长超过视频时，采用正反向交替循环扩展视频帧
+        """
         # If the audio is longer than the video, we need to loop the video
         if len(whisper_chunks) > len(video_frames):
             faces, boxes, affine_matrices = self.affine_transform_video(video_frames)
@@ -344,7 +375,7 @@ class LipsyncPipeline(DiffusionPipeline):
         batch_size = 1
         device = self._execution_device
         mask_image = load_fixed_mask(height, mask_image_path)
-        self.image_processor = ImageProcessor(height, mask=mask, device="cuda", mask_image=mask_image)
+        self.image_processor = ImageProcessor(height, mask=mask, device=device, mask_image=mask_image)
         self.set_progress_bar_config(desc=f"Sample frames: {num_frames}")
 
         # 1. Default height and width to unet
@@ -492,3 +523,15 @@ class LipsyncPipeline(DiffusionPipeline):
 
         command = f"ffmpeg -y -loglevel error -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
         subprocess.run(command, shell=True)
+
+    def upsample(self, x):
+        if x.device.type == "mps":
+            print("[INFO] Using MPS device, applying optimized upsampling method in LipsyncPipeline")
+            # 对于 MPS 设备，使用替代的上采样方法
+            B, C, T, H, W = x.shape
+            x = x.permute(0, 2, 1, 3, 4).reshape(B * T, C, H, W)
+            x = F.interpolate(x, scale_factor=2, mode='nearest')
+            x = x.reshape(B, T, C, H * 2, W * 2).permute(0, 2, 1, 3, 4)
+        else:
+            x = F.interpolate(x, scale_factor=2, mode='nearest')
+        return x

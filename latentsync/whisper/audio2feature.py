@@ -15,7 +15,17 @@ class Audio2Feature:
         num_frames=16,
         audio_feat_length=[2, 2],
     ):
-        self.model = load_model(model_path, device)
+        # 先在CPU加载模型再转移设备
+        if device is None:
+            self.device = torch.device('mps' if torch.backends.mps.is_available() and torch.backends.mps.is_built() else 'cpu')
+        else:
+            self.device = device
+        try:
+            self.model = load_model(model_path, 'cpu').to(self.device)
+        except RuntimeError:
+            self.device = torch.device('cpu')
+            self.model = load_model(model_path, 'cpu').to(self.device)
+        self.model.to(self.device)
         self.audio_embeds_cache_dir = audio_embeds_cache_dir
         self.num_frames = num_frames
         self.embedding_dim = self.model.dims.n_audio_state

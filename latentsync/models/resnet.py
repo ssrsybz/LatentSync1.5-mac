@@ -61,10 +61,22 @@ class Upsample3D(nn.Module):
 
         # if `output_size` is passed we force the interpolation output
         # size and do not make use of `scale_factor=2`
-        if output_size is None:
-            hidden_states = F.interpolate(hidden_states, scale_factor=[1.0, 2.0, 2.0], mode="nearest")
+        if hidden_states.device.type == "mps":
+            # 对于 MPS 设备，使用替代的上采样方法
+            B, C, T, H, W = hidden_states.shape
+            hidden_states = hidden_states.permute(0, 2, 1, 3, 4).reshape(B * T, C, H, W)
+            if output_size is None:
+                hidden_states = F.interpolate(hidden_states, scale_factor=2, mode="nearest")
+                hidden_states = hidden_states.reshape(B, T, C, H * 2, W * 2).permute(0, 2, 1, 3, 4)
+            else:
+                h, w = output_size[1:]
+                hidden_states = F.interpolate(hidden_states, size=(h, w), mode="nearest")
+                hidden_states = hidden_states.reshape(B, T, C, h, w).permute(0, 2, 1, 3, 4)
         else:
-            hidden_states = F.interpolate(hidden_states, size=output_size, mode="nearest")
+            if output_size is None:
+                hidden_states = F.interpolate(hidden_states, scale_factor=[1.0, 2.0, 2.0], mode="nearest")
+            else:
+                hidden_states = F.interpolate(hidden_states, size=output_size, mode="nearest")
 
         # If the input is bfloat16, we cast back to bfloat16
         if dtype == torch.bfloat16:

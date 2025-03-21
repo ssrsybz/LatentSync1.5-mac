@@ -18,13 +18,23 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 
 """
-To use this python script, first install yt-dlp by:
+网络视频下载工具
 
+该脚本使用yt-dlp工具批量下载网络视频，支持多线程并发下载。
+
+使用前请先安装yt-dlp:
 pip install -U yt-dlp
 """
 
 
 def download_video(video_url, video_path):
+    """
+    下载单个视频
+    
+    参数:
+        video_url: 视频URL
+        video_path: 视频保存路径
+    """
     download_video_command = f"yt-dlp -f bestvideo+bestaudio --skip-unavailable-fragments --merge-output-format mp4 '{video_url}' --output '{video_path}' --external-downloader aria2c --external-downloader-args '-x 16 -k 1M'"
     try:
         subprocess.run(download_video_command, shell=True)  # ignore_security_alert_wait_for_fix RCE
@@ -36,11 +46,28 @@ def download_video(video_url, video_path):
 
 
 def download_videos(num_workers, video_urls, video_paths):
+    """
+    批量下载视频
+    
+    参数:
+        num_workers: 并发工作线程数
+        video_urls: 视频URL列表
+        video_paths: 视频保存路径列表
+    """
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         executor.map(download_video, video_urls, video_paths)
 
 
 def extract_vid(video_url):
+    """
+    从视频URL中提取视频ID
+    
+    参数:
+        video_url: 视频URL
+    
+    返回:
+        视频ID或None(如果无法提取)
+    """
     if "clip" in video_url:
         print(f"Cannot download youtube clip video: {video_url}")
         return None

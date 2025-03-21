@@ -58,8 +58,11 @@ class ImageProcessor:
                 self.mask_image = mask_image
 
             if device != "cpu":
+                self.device = "cuda" if isinstance(device, torch.device) and device.type == "cuda" else "mps"
                 self.fa = face_alignment.FaceAlignment(
-                    face_alignment.LandmarksType.TWO_D, flip_input=False, device=device
+                    face_alignment.LandmarksType.TWO_D,
+                    device=self.device,
+                    flip_input=False
                 )
                 self.face_mesh = None
             else:
